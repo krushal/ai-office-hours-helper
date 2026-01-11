@@ -1,0 +1,15 @@
+# Environment variables
+.env
+
+# Node
+node_modules/
+
+# Netlify local dev artifacts
+.netlify/
+
+# Python
+__pycache__/
+.venv/
+venv/
+
+
