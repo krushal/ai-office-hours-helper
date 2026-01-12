@@ -4,6 +4,7 @@ from typing import List
 from pydantic import BaseModel
 from openai import OpenAI
 
+# Netlify injects env vars at runtime
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 
@@ -17,13 +18,15 @@ class Plan(BaseModel):
 
 
 def handler(event, context):
-    if event.get("httpMethod") != "POST":
-        return {
-            "statusCode": 405,
-            "body": json.dumps({"error": "Method not allowed. Use POST."})
-        }
+    print("🐍 Python function invoked")
 
     try:
+        if event.get("httpMethod") != "POST":
+            return {
+                "statusCode": 405,
+                "body": json.dumps({"error": "Method not allowed"})
+            }
+
         body = json.loads(event.get("body") or "{}")
         problem = body.get("problem", "").strip()
 
@@ -34,8 +37,6 @@ def handler(event, context):
             }
 
         prompt = f"""
-Convert the following workflow problem into a structured action plan.
-
 Return ONLY valid JSON with this schema:
 {{
   "problem_statement": "string",
@@ -46,6 +47,12 @@ Return ONLY valid JSON with this schema:
   "next_steps": ["string"]
 }}
 
+Rules:
+- clarifying_questions: 3–5 items
+- proposed_approach: 4–7 items
+- risks_and_privacy: at least 1 item
+- next_steps must start with actionable verbs
+
 Workflow problem:
 "{problem}"
 """
@@ -53,11 +60,15 @@ Workflow problem:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.4
+            temperature=0.3,
         )
 
-        raw = response.choices[0].message.content
+        raw = response.choices[0].message.content.strip()
+
+        # 🔐 Harden JSON parsing
+        raw = raw[raw.find("{"): raw.rfind("}") + 1]
         parsed = json.loads(raw)
+
         validated = Plan(**parsed)
 
         return {
@@ -67,6 +78,7 @@ Workflow problem:
         }
 
     except Exception as e:
+        print("❌ ERROR:", str(e))
         return {
             "statusCode": 500,
             "body": json.dumps({"error": str(e)})
