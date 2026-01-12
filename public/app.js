@@ -1,71 +1,98 @@
+// ====== Global sanity check ======
 console.log("app.js loaded");
 
-const input = document.getElementById("problemInput");
-const button = document.getElementById("generateBtn");
-const statusDiv = document.getElementById("status");
-const outputDiv = document.getElementById("output");
-const jsonOutput = document.getElementById("jsonOutput");
+// ====== Main function ======
+async function generatePlan() {
+  console.log("Generate Plan button clicked");
 
-button.addEventListener("click", async () => {
-  console.log("Generate button clicked");
+  const problemInput = document.getElementById("problemInput");
+  const statusDiv = document.getElementById("status");
+  const outputDiv = document.getElementById("output");
+  const jsonOutput = document.getElementById("jsonOutput");
 
-  statusDiv.textContent = "";
-  outputDiv.innerHTML = "";
-  jsonOutput.textContent = "";
+  console.log("DOM elements:", {
+    problemInput,
+    statusDiv,
+    outputDiv,
+    jsonOutput,
+  });
 
-  if (!input.value.trim()) {
+  const problem = problemInput.value.trim();
+  console.log("Problem text:", problem);
+
+  if (!problem) {
+    console.warn("No problem entered");
     statusDiv.textContent = "Please enter a workflow problem.";
     return;
   }
 
-  statusDiv.textContent = "Generating plan...";
+  statusDiv.textContent = "Calling backend...";
+  outputDiv.innerHTML = "";
+  jsonOutput.textContent = "";
 
   try {
+    console.log("Sending POST request to Netlify function");
+
     const response = await fetch("/.netlify/functions/generate_plan", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify({ problem: input.value })
+      body: JSON.stringify({ problem }),
     });
 
-    console.log("Response status:", response.status);
+    console.log("Response received:", response);
 
-    const data = await response.json();
-    console.log("Response data:", data);
+    const rawText = await response.text();
+    console.log("Raw response text:", rawText);
 
     if (!response.ok) {
-      throw new Error(data.error || "API error");
+      throw new Error(`API Error (${response.status}): ${rawText}`);
     }
 
-    statusDiv.textContent = "";
-    renderPlan(data);
+    const data = JSON.parse(rawText);
+    console.log("Parsed JSON:", data);
+
+    // ===== Render readable output =====
+    outputDiv.innerHTML = `
+      <h3>Problem Statement</h3>
+      <p>${data.problem_statement}</p>
+
+      <h3>Clarifying Questions</h3>
+      <ul>${data.clarifying_questions.map(q => `<li>${q}</li>`).join("")}</ul>
+
+      <h3>Proposed Approach</h3>
+      <ul>${data.proposed_approach.map(p => `<li>${p}</li>`).join("")}</ul>
+
+      <h3>Recommended Tools</h3>
+      <p>${data.recommended_tools.join(", ")}</p>
+
+      <h3>Risks & Privacy</h3>
+      <ul>${data.risks_and_privacy.map(r => `<li>${r}</li>`).join("")}</ul>
+
+      <h3>Next Steps</h3>
+      <ul>${data.next_steps.map(n => `<li>☐ ${n}</li>`).join("")}</ul>
+    `;
+
     jsonOutput.textContent = JSON.stringify(data, null, 2);
-
-  } catch (err) {
-    statusDiv.textContent = err.message;
-    console.error(err);
+    statusDiv.textContent = "Plan generated successfully.";
+    console.log("Rendering complete");
+  } catch (error) {
+    console.error("Error in generatePlan():", error);
+    statusDiv.textContent = `Error: ${error.message}`;
   }
-});
-
-function renderPlan(plan) {
-  outputDiv.innerHTML = `
-    <h2>Problem Statement</h2>
-    <p>${plan.problem_statement}</p>
-
-    <h2>Clarifying Questions</h2>
-    <ul>${plan.clarifying_questions.map(q => `<li>${q}</li>`).join("")}</ul>
-
-    <h2>Proposed Approach</h2>
-    <ul>${plan.proposed_approach.map(p => `<li>${p}</li>`).join("")}</ul>
-
-    <h2>Recommended Tools</h2>
-    <p>${plan.recommended_tools.join(", ")}</p>
-
-    <h2>Risks & Privacy</h2>
-    <ul>${plan.risks_and_privacy.map(r => `<li>${r}</li>`).join("")}</ul>
-
-    <h2>Next Steps</h2>
-    <ul>${plan.next_steps.map(s => `<li>☐ ${s}</li>`).join("")}</ul>
-  `;
 }
+
+// ====== Wire button click safely ======
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("DOM fully loaded");
+
+  const btn = document.getElementById("generateBtn");
+  if (!btn) {
+    console.error("Generate button not found");
+    return;
+  }
+
+  btn.addEventListener("click", generatePlan);
+  console.log("Generate button wired");
+});
